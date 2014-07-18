@@ -2,7 +2,7 @@
 MagicCookie={0b13fe8c-dfe0-40eb-8900-6712719559a7}
 Version=1.0
 [File000]
-Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\emag_feeder_dsPIC_Sync_rev4\spwm.o
+Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\Code\dspic30f4011_spwm_halfbridge_inverter\spwm.o
 Folder=Intermediary
 DeviceName=dsPIC30F4011
 LanguageToolSuiteID={479DDE59-4D56-455E-855E-FFF59A3DB57E}
@@ -15,7 +15,7 @@ ToolArgsString=-g -Wall
 TraceCmdString=
 DebugOptions=
 [File001]
-Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\emag_feeder_dsPIC_Sync_rev4\full_bridge_inv_spwm_rev4.o
+Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\Code\dspic30f4011_spwm_halfbridge_inverter\full_bridge_inv_spwm_rev4.o
 Folder=Intermediary
 DeviceName=dsPIC30F4011
 LanguageToolSuiteID={479DDE59-4D56-455E-855E-FFF59A3DB57E}
@@ -28,7 +28,7 @@ ToolArgsString=-g -Wall
 TraceCmdString=
 DebugOptions=
 [File002]
-Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\emag_feeder_dsPIC_Sync_rev4\30F4011_EMAG_rev4.cof
+Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\Code\dspic30f4011_spwm_halfbridge_inverter\30F4011_EMAG_rev4.cof
 Folder=Output
 DeviceName=dsPIC30F4011
 LanguageToolSuiteID={479DDE59-4D56-455E-855E-FFF59A3DB57E}
@@ -41,7 +41,7 @@ ToolArgsString=-o"$(BINDIR_)$(TARGETBASE).$(TARGETSUFFIX)" -Map="$(BINDIR_)$(TAR
 TraceCmdString=
 DebugOptions=
 [File003]
-Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\emag_feeder_dsPIC_Sync_rev4\30F4011_EMAG_rev4.hex
+Location=D:\JAMES_PRIVATE\Dropbox\electromagnetic vibration feeder design\Code\dspic30f4011_spwm_halfbridge_inverter\30F4011_EMAG_rev4.hex
 Folder=Output
 DeviceName=dsPIC30F4011
 LanguageToolSuiteID={479DDE59-4D56-455E-855E-FFF59A3DB57E}

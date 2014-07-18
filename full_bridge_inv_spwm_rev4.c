@@ -107,8 +107,11 @@ int main(void){
 	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
 	for(mcnt=1;mcnt<=2;mcnt++){						/*I'm getting 2 Pin. OK! Do u have a problem?*/
 		adc_value[mcnt-1] = ReadADC10(mcnt);
+	}	
+	for(mcnt=0;mcnt<=MOVEING_SIZE;mcnt++){			/*Adding Adc Value for initial queue.*/
+		adc_mavg[0] = MovingAverage(q0data,adc_value[0]/11);
+		first_spwm_sin_amp = adc_value[0]/11;		/*Adding adc(an1) to be the target of increasing amplitude*/
 	}
-	first_spwm_sin_amp = adc_value[0]/11;			/*Adding adc(an1) to be the target of increasing amplitude*/
 
 	/*
 	*	Start SPWM Now!!
@@ -144,12 +147,20 @@ int main(void){
 		spwm_sin_amp = adc_mavg[0];
 
 		/*Demo Adjusting Frequency*/
-		adc_mavg[1] = MovingAverage(q1data,ADC2SpwmPeriod(adc_value[1]));
-		PR1 = ADC2SpwmPeriod(adc_mavg[1]);
+		unsigned int kka;
+		adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+
+		/*Debugging : Send adc_mavg[1]*/
+		serial_buffer[0]='\0';
+		sprintf(serial_buffer,"adc_mavg[1]=%d, ", adc_mavg[1]);
+		UART1SendText(serial_buffer);
+
+		/*Updating period*/
+		PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1*/
 
 		/*Debugging : Send PR1*/
 		serial_buffer[0]='\0';
-		sprintf(serial_buffer,"PR1=%d, ", PR1);
+		sprintf(serial_buffer,"PR1=%d, ", kka);
 		UART1SendText(serial_buffer);
 
 		/*Debugging : End*/
@@ -442,7 +453,7 @@ void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void)
     *	For Testing System Alive!!!
     */
     if(!initial_flag){
-		if(++tr1_loop_count >= 20000){
+		if(++tr1_loop_count >= 10000){
 			LED = !LED;
 			tr1_loop_count = 0;
 		}
