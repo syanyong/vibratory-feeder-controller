@@ -158,11 +158,6 @@ int main(void){
 		/*Updating period*/
 		PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1*/
 
-		/*Debugging : Send PR1*/
-		serial_buffer[0]='\0';
-		sprintf(serial_buffer,"PR1=%d, ", kka);
-		UART1SendText(serial_buffer);
-
 		/*Debugging : End*/
 		UART1SendText("\n\r");
 	
