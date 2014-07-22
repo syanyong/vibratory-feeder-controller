@@ -26,14 +26,14 @@ _FGS(CODE_PROT_OFF);										// Code Protect OFF
 /* End Configuration For ET-BASE dsPIC30F4011 */
 
 /* Global Define *********************************************************************************/
-#define MOVEING_SIZE		10
+#define RELAY_PIN			_LATE4 /*E0-E3 For SPWM*/
 #define LED 				_LATB0
 #define ADC1_PIN			_LATB1
 #define ADC2_PIN			_LATB2
 #define ADC3_PIN			_LATB3
-#define BT_START			_LATE0
-#define BT_MODE				_LATE0
-#define EXT_TRIGGER			_LATE0
+#define BT_START			!PORTDbits.RD0
+#define EXT_TRIGGER			_LATD1
+#define MOVEING_SIZE		10
 
 /* Global Variable *******************************************************************************/
 /*For SPWM Function*/
@@ -66,12 +66,20 @@ void UART1SendText(char[]);
 void UART1SendStrNumLine(char[], unsigned int);
 void AdcInitV2(void);														/*Adc Module*/
 unsigned int ADC2SpwmPeriod(unsigned int);
-void Timer1Interrupt(void);													/*Timer Module*/
+void Timer1Interrupt(unsigned char);										/*Timer Module*/
 void ExtiInterrupt(void);													/*External Interrupt*/
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void);		/*ISR*/
 /*void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);*/
 /*void __attribute__((__interrupt__, __auto_psv__)) _U1RXInterrupt(void);*/
 
+void GetAdc(unsigned int * pt_adc){
+	unsigned char i=0;
+	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
+	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
+	for(i=0;i<=1;i++){
+		*(pt_adc+i) = ReadADC10(i+1);
+	}	
+}
 /**************************************************************************************************
 * Function Name: Main
 * Output Variable:
@@ -85,7 +93,7 @@ int main(void){
 	*	Initial I/O
 	*  	TRISX: Output is 0b0, Input is 0b1 for earch bit.
 	*/
-	TRISD = 0x0000;
+	TRISD = 0x0003;
 	LATD = 0x0000;
 	TRISE = 0x0000;
 	LATE = 0x000F;
@@ -106,74 +114,130 @@ int main(void){
 		q0data[mcnt] = 0;
 		q1data[mcnt] = 0;
 	}
-	
-	/*
-	*	Getting 1st Adc Value
-	*/
-	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
-	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
-	for(mcnt=1;mcnt<=2;mcnt++){						/*I'm getting 2 Pin. OK! Do u have a problem?*/
-		adc_value[mcnt-1] = ReadADC10(mcnt);
-	}	
-	for(mcnt=0;mcnt<=MOVEING_SIZE;mcnt++){			/*Adding Adc Value for initial queue.*/
-		adc_mavg[0] = MovingAverage(q0data,adc_value[0]/11);
-		first_spwm_sin_amp = adc_value[0]/11;		/*Adding adc(an1) to be the target of increasing amplitude*/
-	}
-
-	/*
-	*	Start SPWM Now!!
-	*/
-	initial_flag = 1;								/*Start initial state*/
-	LED = 0b1;										/*For show initial state*/
-	spwm_sin_amp = 10;								/*Start Up Sin Amplitude*/
-	PR1 = 160;										/*Default PR1*/
-	PR1 = ADC2SpwmPeriod(adc_value[1]);				/*Adding adc(an2) to adjust PR1*/
-	SawToothGen(tri_table, 640, 32);				/*Refer to spwm.h*/
-	Timer1Interrupt();								/*Timer Start!!!!!!*/
-	delay_ms(100);
-	for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=2){
-		spwm_sin_amp = mcnt;
-		delay_ms(50);
-	}
-	initial_flag = 0;								/*End initial state*/
-
 	while (1) 
 	{
-		/*Get Adc Value*/
-		ADCON1bits.SAMP = 1;                    	/*Start Sampling*/
-		ConvertADC10();                 			/*Convert to Digital 10 bits*/     
-		for(mcnt=1;mcnt<=2;mcnt++){
-			adc_value[mcnt-1] = ReadADC10(mcnt);
-			sprintf(serial_buffer,"ADC%d=%d, ", mcnt, adc_value[mcnt-1]);
-			UART1SendText(serial_buffer);
+		/*
+		*
+		*	Start engine
+		*
+		*/
+
+		/*Waiting for BT_START*/
+		mcnt = 0;
+		while(!BT_START){								/*If BT_START is True, Exiting the while loop*/
+			if(mcnt++ <= 5){
+				LED = 1;
+			}else if((mcnt >5)&&(mcnt<=50)){
+				LED = 0;
+			}else if(mcnt > 50){
+				mcnt = 0;
+			}
+			GetAdc(adc_value);
+			for(mcnt2=0;mcnt2<=1;mcnt2++){
+				sprintf(serial_buffer,"ADC%d=%d, ", mcnt2+1, adc_value[mcnt2]);
+				UART1SendText(serial_buffer);
+			}	
+			UART1SendText(";\n\r");
+			delay_ms(10);
 		}
+		/*
+		*	Start SPWM Softly....
+		*/
 		
+		UART1SendText("Soft-start;\n\r");
+		/*1. Initial*/
+		for(mcnt=0;mcnt<=MOVEING_SIZE;mcnt++){			/*Adding AdcValue for initial queue.*/
+			GetAdc(adc_value);
+			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
+			adc_mavg[1] = MovingAverage(q0data,adc_value[1]);
+		}
+		initial_flag = 1;								/*Set Initial Flag*/
+		LED = 0b1;										/*For show initial state*/
+		spwm_sin_amp = 10;								/*Start Up Sin Amplitude*/
+		PR1 = 160;										/*Default PR1*/
 
-		/*Demo Adjusting Sin Wave Amplitude*/
-		adc_mavg[0] = MovingAverage(q0data,adc_value[0]/11);
-		spwm_sin_amp = adc_mavg[0];
+		/*2. Preparing for Soft-start process*/
+		first_spwm_sin_amp = adc_mavg[0]/11;			/*Adding adc(an1) to be the target of increasing amplitude*/
+		PR1 = ADC2SpwmPeriod(adc_mavg[1]);				/*Adding adc(an2) to adjust PR1*/
 
-		/*Demo Adjusting Frequency*/
-		adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+		/*3. Creating SawTooth Signal before start*/
+		SawToothGen(tri_table, 640, 32);				/*Refer to spwm.h*/
 
-		/*Updating period*/
-		PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1*/
+		/*4. Start Timer*/
+		Timer1Interrupt(1);								/*Timer Start!!!!!!*/
+		delay_ms(100);
 
-		/*Debugging : Send adc_mavg*/
-		serial_buffer[0]='\0';
-		sprintf(serial_buffer,"mavg0=%d(Adj), ", adc_mavg[0]);
-		UART1SendText(serial_buffer);
+		/*5. Set Relay*/
+		RELAY_PIN = 1;
+		
+		/*6. Soft-start*/
+		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=2){
+			spwm_sin_amp = mcnt;
+			UART1SendStrNumLine("COUNT",mcnt);
+			UART1SendText(";\n\r");
+			delay_ms(50);
+		}
+		initial_flag = 0;								/*Clear Initial lag*/
 
-		serial_buffer[0]='\0';
-		sprintf(serial_buffer,"mavg1=%d;", adc_mavg[1]);
-		UART1SendText(serial_buffer);
+		/*
+		*	Operating Loop
+		*/
+		while(1){										
 
-		/*Debugging : End*/
-		UART1SendText(";\n\r");
-	
-		/*Sampling Times (Soft)*/
-		delay_ms(10);
+			/*Get Adc Value*/
+			ADCON1bits.SAMP = 1;                    	/*Start Sampling*/
+			ConvertADC10();                 			/*Convert to Digital 10 bits*/     
+			for(mcnt=1;mcnt<=2;mcnt++){
+				adc_value[mcnt-1] = ReadADC10(mcnt);
+				sprintf(serial_buffer,"ADC%d=%d, ", mcnt, adc_value[mcnt-1]);
+				UART1SendText(serial_buffer);
+			}
+			
+			/*Demo Adjusting Sin Wave Amplitude*/
+			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
+			spwm_sin_amp = adc_mavg[0]/11;
 
+			/*Demo Adjusting Frequency*/
+			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+
+			/*Updating period*/
+			PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1 directly*/
+
+			/*Debugging : Send adc_mavg*/
+			serial_buffer[0]='\0';
+			sprintf(serial_buffer,"mavg0=%d(Adj), ", adc_mavg[0]);
+			UART1SendText(serial_buffer);
+
+			serial_buffer[0]='\0';
+			sprintf(serial_buffer,"mavg1=%d;", adc_mavg[1]);
+			UART1SendText(serial_buffer);
+
+			/*Debugging : End*/
+			UART1SendText(";\n\r");
+
+			/*Sampling Times (Soft)*/
+			delay_ms(10);
+			
+			/*
+			*	Check stop button to stop engine.
+			*/
+			if(!BT_START){								/*If BT_START is False, Breaking the while loop*/
+				initial_flag = 1;								/*Set Initial Flag*/
+				LED = 1;
+				RELAY_PIN = 0;									/*2. Clear Relay*/
+				for(mcnt = spwm_sin_amp;mcnt >= 10;mcnt-=1){	/*1. Soft-Stop*/
+					spwm_sin_amp = mcnt;
+					UART1SendStrNumLine("COUNT",mcnt);
+					UART1SendText(";\n\r");
+					delay_ms(50);
+				}
+				Timer1Interrupt(0);								/*3. Stop Timer*/
+				SPWM_GATE1 = 0;									/*4. Clear all drive signal*/
+				SPWM_GATE2 = 0;
+				initial_flag = 0;								/*Set Initial Flag*/
+				break;
+			}
+		}
 	}
 }
 
@@ -248,7 +312,7 @@ void AdcInitV2(void){
 * Note: 
 * First written : 
 **************************************************************************************************/
-void Timer1Interrupt(void){
+void Timer1Interrupt(unsigned char enable){
 	/*
 	*  Dead time 2 us
 	*  648
@@ -264,7 +328,7 @@ void Timer1Interrupt(void){
 	IEC0bits.T1IE = 1; 			//Timer1 Interrupt Enable bit
 	IPC0bits.T1IP = 0b111; 		//Timer1 Interrupt Priority bits (111=highest)
 
-	T1CONbits.TON = 1;
+	T1CONbits.TON = enable;
 }
 /**************************************************************************************************
 * Function Name: 
