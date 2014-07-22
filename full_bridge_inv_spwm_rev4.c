@@ -28,6 +28,12 @@ _FGS(CODE_PROT_OFF);										// Code Protect OFF
 /* Global Define *********************************************************************************/
 #define MOVEING_SIZE		10
 #define LED 				_LATB0
+#define ADC1_PIN			_LATB1
+#define ADC2_PIN			_LATB2
+#define ADC3_PIN			_LATB3
+#define BT_START			_LATE0
+#define BT_MODE				_LATE0
+#define EXT_TRIGGER			_LATE0
 
 /* Global Variable *******************************************************************************/
 /*For SPWM Function*/
@@ -61,6 +67,7 @@ void UART1SendStrNumLine(char[], unsigned int);
 void AdcInitV2(void);														/*Adc Module*/
 unsigned int ADC2SpwmPeriod(unsigned int);
 void Timer1Interrupt(void);													/*Timer Module*/
+void ExtiInterrupt(void);													/*External Interrupt*/
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void);		/*ISR*/
 /*void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);*/
 /*void __attribute__((__interrupt__, __auto_psv__)) _U1RXInterrupt(void);*/
@@ -147,19 +154,22 @@ int main(void){
 		spwm_sin_amp = adc_mavg[0];
 
 		/*Demo Adjusting Frequency*/
-		unsigned int kka;
 		adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
-
-		/*Debugging : Send adc_mavg[1]*/
-		serial_buffer[0]='\0';
-		sprintf(serial_buffer,"adc_mavg[1]=%d, ", adc_mavg[1]);
-		UART1SendText(serial_buffer);
 
 		/*Updating period*/
 		PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1*/
 
+		/*Debugging : Send adc_mavg*/
+		serial_buffer[0]='\0';
+		sprintf(serial_buffer,"mavg0=%d(Adj), ", adc_mavg[0]);
+		UART1SendText(serial_buffer);
+
+		serial_buffer[0]='\0';
+		sprintf(serial_buffer,"mavg1=%d;", adc_mavg[1]);
+		UART1SendText(serial_buffer);
+
 		/*Debugging : End*/
-		UART1SendText("\n\r");
+		UART1SendText(";\n\r");
 	
 		/*Sampling Times (Soft)*/
 		delay_ms(10);
@@ -274,6 +284,35 @@ void Timer2Interrupt(void){
 	IPC1bits.T2IP = 0b110; // Timer1 Interrupt Priority bits (111=highest)
 
 	T2CONbits.TON = 0;
+}
+
+/**************************************************************************************************
+* Function Name: External Interrupt Initial
+* Propose: 
+* Output Variable:
+* Input Variable:
+* Reference: 
+* Note: 
+* First written : 
+**************************************************************************************************/
+void ExtiInterrupt(void){
+	//INTCON2 = 0x001E;       /*Setup INT1, INT2, INT3 & INT4 pins to interupt */
+	                        /*on falling edge and set up INT0 pin to interupt */
+	                        /*on rising edge */
+	// IFS0bits.INT0IF = 0;    /*Reset INT0 interrupt flag */
+	// IEC0bits.INT0IE = 1;    /*Enable INT0 Interrupt Service Routine */
+
+	// IFS1bits.INT1IF = 0;    /*Reset INT1 interrupt flag */
+	// IEC1bits.INT1IE = 1;    /*Enable INT1 Interrupt Service Routine */
+
+	// IFS1bits.INT2IF = 0;    /*Reset INT0 interrupt flag */
+	// IEC1bits.INT2IE = 1;    /*Enable INT0 Interrupt Service Routine */
+
+	// IFS3bits.INT3IF = 0;    /*Reset INT1 interrupt flag */
+	// IEC3bits.INT3IE = 1;    /*Enable INT1 Interrupt Service Routine */
+
+	// IFS3bits.INT4IF = 0;    /*Reset INT1 interrupt flag */
+	// IEC3bits.INT4IE = 1;    /*Enable INT1 Interrupt Service Routine */
 }
 /**************************************************************************************************
 * Function Name: Moving Average
@@ -461,6 +500,24 @@ void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void)
     SPWM_OUT = 1;				/*Ping*/
 	DemoSpwmGenHalf(&spwm_kk, sin_table, tri_table, spwm_sin_amp);
 ;	SPWM_OUT = 0;				/*Pong*/
+}
+
+/**************************************************************************************************
+* Function Name: INT0 Interrupt service routine
+* Propose: 
+* Output Variable: 
+* Input Variable:
+* Reference: 
+* Note: _INT0Interrupt() is the INT0 interrupt service routine (ISR).
+		The routine must have global scope in order to be an ISR.
+		The ISR name is chosen from the device linker script.
+* First written : 
+**************************************************************************************************/
+void __attribute__((interrupt, no_auto_psv)) _INT0Interrupt(void)
+{
+
+        IFS0bits.INT0IF = 0;    //Clear the INT0 interrupt flag or else
+                                //the CPU will keep vectoring back to the ISR
 }
 /**************************************************************************************************
 * Function Name: U1RXInterrupt Service routine.
