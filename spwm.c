@@ -214,16 +214,16 @@ void DemoSpwmGenHalf(saw_spwm * sp, const unsigned int * sin_lookup, unsigned in
     sp->sinsig = (*(sin_lookup + sp->sinptr)*s_amp)/100;       /*Adjusting Sine Amplitude*/                     
     if(++sp->sinptr > SPWM_SINMAXPTR){                          /*SIN WAVE COUNTER*/
         sp->sinptr = 0;                                        /*Reset pointer for create Infinity Sine Wave*/
-        SPWM_TRIOUT =!SPWM_TRIOUT;  
+        //SPWM_TRIOUT =!SPWM_TRIOUT;  
     }
 
     /*Driving Signal Phase 1 : P1ST-P1ED*/
     //if((sp->period >= SPWM_DT) && (sp->period <= (1999-SPWM_DT))) {
     // if((sp->period >= SPWM_DT) && (sp->period <= (1999-SPWM_DT))) {
         if(sp->sinsig >= sp->trisig){                          /*TriAngle and Sinusoid Comparision*/
-            SPWM_GATE1 = 1; 
+            SPWM_GATE1 = 1; SPWM_TRIOUT = 1;
         }else{
-            SPWM_GATE1 = 0; 
+            SPWM_GATE1 = 0; SPWM_TRIOUT = 0;
         }
     // }else{
     //     SPWM_GATE1 = 0;

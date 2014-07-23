@@ -5,11 +5,14 @@
 * I/O:	RB0 = LED STATUS;
 *		RB1	= ADC1;
 *		RB2 = ADC2;
-*		RD0 = SPWM Output;
-*		RD1 = Reserved;
-*		RD2 = (Debugging) Sin Wave Frequency
-*		RD3 = (Debugging) Sampling time
+*		RB3 = EXT_ADC;
+*		RD0 = BT_START
+*		RD1 = EXT_TRIGGER;
+*		RE1 = SPWM_GATE1
+*		RE2 = SPWM_TRIOUT (As same as SPWM_GATE1)
+*		RE3 = SPWM_OUT (Sampling Time)
 *		UART = 19200
+* Update: 2014/07/23 15:01
 * First written : Sarucha Yanyong
 **************************************************************************************************/
 #include <p30F4011.h>
@@ -77,7 +80,7 @@ void GetAdc(unsigned int * pt_adc){
 	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
 	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
 	for(i=0;i<=1;i++){
-		*(pt_adc+i) = ReadADC10(i+1);
+		*(pt_adc+i) = ReadADC10(i);
 	}	
 }
 /**************************************************************************************************
@@ -175,7 +178,7 @@ int main(void){
 		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=2){
 			spwm_sin_amp = mcnt;
 			UART1SendStrNumLine("COUNT",mcnt);
-			delay_ms(200);
+			delay_ms(100+(PR1*0.5));
 		}
 		UART1SendText("LET'S GO!!!;\n\r");
 		initial_flag = 0;								/*Clear Initial lag*/
@@ -186,10 +189,11 @@ int main(void){
 		while(1){										
 
 			/*Get Adc Value*/
-			ADCON1bits.SAMP = 1;                    	/*Start Sampling*/
-			ConvertADC10();                 			/*Convert to Digital 10 bits*/     
+			GetAdc(adc_value);
+			//ADCON1bits.SAMP = 1;                    	/*Start Sampling*/
+			//ConvertADC10();                 			/*Convert to Digital 10 bits*/     
 			for(mcnt=1;mcnt<=2;mcnt++){
-				adc_value[mcnt-1] = ReadADC10(mcnt);
+				//adc_value[mcnt-1] = ReadADC10(mcnt);
 				sprintf(serial_buffer,"ADC%d=%d, ", mcnt, adc_value[mcnt-1]);
 				UART1SendText(serial_buffer);
 			}
@@ -229,7 +233,7 @@ int main(void){
 				for(mcnt = spwm_sin_amp;mcnt >= 10;mcnt-=2){	/*1. Soft-Stop*/
 					spwm_sin_amp = mcnt;
 					UART1SendStrNumLine("COUNT",mcnt);
-					delay_ms(200);
+					delay_ms(PR1*0.5);
 				}
 				Timer1Interrupt(0);								/*3. Stop Timer*/
 				SPWM_GATE1 = 0;									/*4. Clear all drive signal*/
@@ -284,13 +288,14 @@ void AdcInitV2(void){
 	            	ENABLE_AN1_ANA &
 	            	ENABLE_AN2_ANA &
 	            	ENABLE_AN3_ANA ;                                          
-	Scanselect= 	SKIP_SCAN_AN4 &             // Scan for AN0-AN3
+	Scanselect= 	SKIP_SCAN_AN0 &				// Scan for AN0-AN3
+					SKIP_SCAN_AN4 &             
 	            	SKIP_SCAN_AN5 &
 	            	SKIP_SCAN_AN6 &
 	            	SKIP_SCAN_AN7;                                                              
-	Adcon3_reg = 	ADC_SAMPLE_TIME_10 &        // Sample for 10 time
-	             	ADC_CONV_CLK_INTERNAL_RC &  // Internal Clock
-	             	ADC_CONV_CLK_5Tcy; 
+	Adcon3_reg = 	ADC_SAMPLE_TIME_5 &        	// Sample for 10 time
+	             	ADC_CONV_CLK_SYSTEM &  		// Internal Clock
+	             	ADC_CONV_CLK_2Tcy; 
 	Adcon2_reg =	ADC_VREF_AVDD_AVSS &        // Vref at Vdd and Vss
 	                ADC_SCAN_ON &               // Enable scan for ADC
 	                ADC_ALT_BUF_OFF &           // Disable alternate buffer
@@ -301,7 +306,7 @@ void AdcInitV2(void){
 	                ADC_IDLE_CONTINUE &         // ADC run on idle mode
 	               	ADC_FORMAT_INTG &           // Output value integer format
 	                ADC_CLK_MANUAL &            // ADC manual clock
-	                ADC_SAMPLE_SIMULTANEOUS &   // ADC sampling simultaneous
+	                ADC_SAMPLE_INDIVIDUAL &   	// ADC sampling simultaneous
 	                ADC_AUTO_SAMPLING_ON;       // ADC auto sampling                        
 	OpenADC10(Adcon1_reg, Adcon2_reg, Adcon3_reg, PinConfig, Scanselect);	// Turn on ADC module     
 }
