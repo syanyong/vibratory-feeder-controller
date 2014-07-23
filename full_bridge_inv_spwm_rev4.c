@@ -96,7 +96,7 @@ int main(void){
 	TRISD = 0x0003;
 	LATD = 0x0000;
 	TRISE = 0x0000;
-	LATE = 0x000F;
+	LATE = 0x0000;
 	TRISB = 0x000E;									/*Reserving RB1 for LED Output*/
 	LATB = 0x0000;	
 
@@ -137,6 +137,7 @@ int main(void){
 				sprintf(serial_buffer,"ADC%d=%d, ", mcnt2+1, adc_value[mcnt2]);
 				UART1SendText(serial_buffer);
 			}	
+			UART1SendText(" Waiting for BT_START");
 			UART1SendText(";\n\r");
 			delay_ms(10);
 		}
@@ -155,28 +156,28 @@ int main(void){
 		LED = 0b1;										/*For show initial state*/
 		spwm_sin_amp = 10;								/*Start Up Sin Amplitude*/
 		PR1 = 160;										/*Default PR1*/
-
-		/*2. Preparing for Soft-start process*/
 		first_spwm_sin_amp = adc_mavg[0]/11;			/*Adding adc(an1) to be the target of increasing amplitude*/
-		PR1 = ADC2SpwmPeriod(adc_mavg[1]);				/*Adding adc(an2) to adjust PR1*/
 
 		/*3. Creating SawTooth Signal before start*/
 		SawToothGen(tri_table, 640, 32);				/*Refer to spwm.h*/
 
 		/*4. Start Timer*/
 		Timer1Interrupt(1);								/*Timer Start!!!!!!*/
-		delay_ms(100);
+		PR1 = ADC2SpwmPeriod(adc_mavg[1]);
+		UART1SendText("TIMER ON;\n\r");
+		delay_ms(4000);
 
 		/*5. Set Relay*/
-		RELAY_PIN = 1;
+		RELAY_PIN = 1;	
+		UART1SendText("RELAY ON;\n\r");
 		
 		/*6. Soft-start*/
 		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=2){
 			spwm_sin_amp = mcnt;
 			UART1SendStrNumLine("COUNT",mcnt);
-			UART1SendText(";\n\r");
-			delay_ms(50);
+			delay_ms(200);
 		}
+		UART1SendText("LET'S GO!!!;\n\r");
 		initial_flag = 0;								/*Clear Initial lag*/
 
 		/*
@@ -225,15 +226,16 @@ int main(void){
 				initial_flag = 1;								/*Set Initial Flag*/
 				LED = 1;
 				RELAY_PIN = 0;									/*2. Clear Relay*/
-				for(mcnt = spwm_sin_amp;mcnt >= 10;mcnt-=1){	/*1. Soft-Stop*/
+				for(mcnt = spwm_sin_amp;mcnt >= 10;mcnt-=2){	/*1. Soft-Stop*/
 					spwm_sin_amp = mcnt;
 					UART1SendStrNumLine("COUNT",mcnt);
-					UART1SendText(";\n\r");
-					delay_ms(50);
+					delay_ms(200);
 				}
 				Timer1Interrupt(0);								/*3. Stop Timer*/
 				SPWM_GATE1 = 0;									/*4. Clear all drive signal*/
 				SPWM_GATE2 = 0;
+				SPWM_TRIOUT = 0;
+				SPWM_OUT = 0;
 				initial_flag = 0;								/*Set Initial Flag*/
 				break;
 			}
