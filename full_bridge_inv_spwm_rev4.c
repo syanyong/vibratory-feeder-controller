@@ -46,6 +46,7 @@ unsigned tri_table[SPWM_SAWSIZE];
 unsigned char spwm_sin_amp;
 
 /*For Main Function*/
+unsigned int intp_delay_cnt = 0;
 unsigned char initial_flag;
 unsigned char first_spwm_sin_amp;
 char serial_buffer[20]="";
@@ -70,9 +71,10 @@ void UART1SendStrNumLine(char[], unsigned int);
 void AdcInitV2(void);														/*Adc Module*/
 unsigned int ADC2SpwmPeriod(unsigned int);
 void Timer1Interrupt(unsigned char);										/*Timer Module*/
+void Timer2Interrupt(void);
 void ExtiInterrupt(void);													/*External Interrupt*/
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void);		/*ISR*/
-/*void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);*/
+void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);
 /*void __attribute__((__interrupt__, __auto_psv__)) _U1RXInterrupt(void);*/
 
 void GetAdc(unsigned int * pt_adc){
@@ -82,6 +84,12 @@ void GetAdc(unsigned int * pt_adc){
 	for(i=0;i<=1;i++){
 		*(pt_adc+i) = ReadADC10(i);
 	}	
+	*(pt_adc) = 930; // amp
+	*(pt_adc+1) = 200;
+}
+void delay_int_ms(unsigned int inp){
+	intp_delay_cnt = inp;
+	while(intp_delay_cnt>0);
 }
 /**************************************************************************************************
 * Function Name: Main
@@ -107,9 +115,15 @@ int main(void){
 	*	Initial Module
 	*/
 	UART1Init();
+	Timer2Interrupt();
 	AdcInitV2();
 	UART1SendStrNumLine("START",1234);
-
+	// while(1){
+	// 	LED =1;
+	// 	delay_int_ms(1000);
+	// 	LED =0;
+	// 	delay_int_ms(1000);
+	// }
 	/*
 	*	Initial Queue Module
 	*/
@@ -137,12 +151,12 @@ int main(void){
 			}
 			GetAdc(adc_value);
 			for(mcnt2=0;mcnt2<=1;mcnt2++){
-				sprintf(serial_buffer,"ADC%d=%d, ", mcnt2+1, adc_value[mcnt2]);
+				sprintf(serial_buffer,"%d,", adc_value[mcnt2]);
 				UART1SendText(serial_buffer);
 			}	
-			UART1SendText(" Waiting for BT_START");
-			UART1SendText(";\n\r");
-			delay_ms(10);
+			//UART1SendText(" Waiting for BT_START");
+			UART1SendText("\n\r");
+			delay_int_ms(10);
 		}
 		/*
 		*	Start SPWM Softly....
@@ -175,14 +189,16 @@ int main(void){
 		UART1SendText("RELAY ON;\n\r");
 		
 		/*6. Soft-start*/
-		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=2){
+		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt++){
 			spwm_sin_amp = mcnt;
+			PR1 = ADC2SpwmPeriod(adc_mavg[1]);
 			UART1SendStrNumLine("COUNT",mcnt);
-			delay_ms(100+(PR1*0.5));
+			//delay_ms(100+(PR1));
+			delay_int_ms(150);
 		}
 		UART1SendText("LET'S GO!!!;\n\r");
-		initial_flag = 0;								/*Clear Initial lag*/
 
+		initial_flag = 0;								/*Clear Initial lag*/
 		/*
 		*	Operating Loop
 		*/
@@ -190,11 +206,9 @@ int main(void){
 
 			/*Get Adc Value*/
 			GetAdc(adc_value);
-			//ADCON1bits.SAMP = 1;                    	/*Start Sampling*/
-			//ConvertADC10();                 			/*Convert to Digital 10 bits*/     
 			for(mcnt=1;mcnt<=2;mcnt++){
 				//adc_value[mcnt-1] = ReadADC10(mcnt);
-				sprintf(serial_buffer,"ADC%d=%d, ", mcnt, adc_value[mcnt-1]);
+				sprintf(serial_buffer,"%d,", adc_value[mcnt-1]);
 				UART1SendText(serial_buffer);
 			}
 			
@@ -210,15 +224,15 @@ int main(void){
 
 			/*Debugging : Send adc_mavg*/
 			serial_buffer[0]='\0';
-			sprintf(serial_buffer,"mavg0=%d(Adj), ", adc_mavg[0]);
+			sprintf(serial_buffer,"%d,", adc_mavg[0]);
 			UART1SendText(serial_buffer);
 
 			serial_buffer[0]='\0';
-			sprintf(serial_buffer,"mavg1=%d;", adc_mavg[1]);
+			sprintf(serial_buffer,"%d,", adc_mavg[1]);
 			UART1SendText(serial_buffer);
 
 			/*Debugging : End*/
-			UART1SendText(";\n\r");
+			UART1SendText("\n\r");
 
 			/*Sampling Times (Soft)*/
 			delay_ms(10);
@@ -233,7 +247,7 @@ int main(void){
 				for(mcnt = spwm_sin_amp;mcnt >= 10;mcnt-=2){	/*1. Soft-Stop*/
 					spwm_sin_amp = mcnt;
 					UART1SendStrNumLine("COUNT",mcnt);
-					delay_ms(PR1*0.5);
+					delay_int_ms(100);
 				}
 				Timer1Interrupt(0);								/*3. Stop Timer*/
 				SPWM_GATE1 = 0;									/*4. Clear all drive signal*/
@@ -347,14 +361,16 @@ void Timer1Interrupt(unsigned char enable){
 * First written : 
 **************************************************************************************************/
 void Timer2Interrupt(void){
-	PR2 = 58;	/*250KHz, 4us*/
-	T2CONbits.TCKPS = 0b00; // Prescale	
+	T2CONbits.TON = 0;
+
+	PR2 = 60;	/*250KHz, 4us*/
+	T2CONbits.TCKPS = 0b11; // Prescale	
 
 	IFS0bits.T2IF = 1; //Timer1 Interrupt Flag Status bit
 	IEC0bits.T2IE = 1; //Timer1 Interrupt Enable bit
-	IPC1bits.T2IP = 0b110; // Timer1 Interrupt Priority bits (111=highest)
+	IPC1bits.T2IP = 0b100; // Timer1 Interrupt Priority bits (111=highest)
 
-	T2CONbits.TON = 0;
+	T2CONbits.TON = 1;
 }
 
 /**************************************************************************************************
@@ -572,7 +588,13 @@ void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void)
 	DemoSpwmGenHalf(&spwm_kk, sin_table, tri_table, spwm_sin_amp);
 ;	SPWM_OUT = 0;				/*Pong*/
 }
-
+void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void)
+{
+    _T2IF = 0;					/*Clear Timer 1 interrupt flag*/
+	if(intp_delay_cnt>0){
+		intp_delay_cnt--;
+	}
+}
 /**************************************************************************************************
 * Function Name: INT0 Interrupt service routine
 * Propose: 
