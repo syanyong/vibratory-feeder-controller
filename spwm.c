@@ -201,7 +201,9 @@ void DemoSpwmGen2(stspwm * sp, const unsigned int * sin_lookup, unsigned int * t
 * Version: 2014-07-17 22-23
 * First written : Sarucha Yanyong
 **************************************************************************************************/
-void DemoSpwmGenHalf(saw_spwm * sp, const unsigned int * sin_lookup, unsigned int * tri_lookup, unsigned int s_amp){
+unsigned int tm1;
+unsigned int tm2;
+void DemoSpwmGenHalf(saw_spwm * sp, const int * sin_lookup, unsigned int * tri_lookup, unsigned int s_amp){
     /*Generating Triangle*/
     /*Triangle is Ok! Checking on 2014-07-16 21-25*/
     sp->trisig = *(tri_lookup + sp->triptr);                      
@@ -211,9 +213,11 @@ void DemoSpwmGenHalf(saw_spwm * sp, const unsigned int * sin_lookup, unsigned in
     /*Getting Sine from table*/
     /* sin wave generator is independent from other signal because sine wave pointer is counting itself.
     */
-    sp->sinsig = (*(sin_lookup + sp->sinptr)*s_amp)/100;       /*Adjusting Sine Amplitude*/                     
+    //sp->sinsig = (*(sin_lookup + sp->sinptr)*s_amp)/100;       /*Adjusting Sine Amplitude*/    
+    // sp->sinsig = ((*(sin_lookup + sp->sinptr))*s_amp)/100+ 320;            /*Adjusting Sine Amplitude*/     
+    sp->sinsig = (( *(sin_lookup + sp->sinptr) )*((int)s_amp))/100 + 320;              
     if(++sp->sinptr > SPWM_SINMAXPTR){                          /*SIN WAVE COUNTER*/
-        sp->sinptr = 0;                                        /*Reset pointer for create Infinity Sine Wave*/
+        sp->sinptr = 0;                                         /*Reset pointer for create Infinity Sine Wave*/
         //SPWM_TRIOUT =!SPWM_TRIOUT;  
     }
 

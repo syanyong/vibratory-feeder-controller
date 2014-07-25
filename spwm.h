@@ -48,5 +48,5 @@ void DemoTriGen(unsigned int*);
 void SawToothGen(unsigned int*, const unsigned int, const unsigned char);
 void DemoSpwmGen(stspwm*, const unsigned int *);
 void DemoSpwmGen2(stspwm*, const unsigned int *, unsigned int *);
-void DemoSpwmGenHalf(saw_spwm*, const unsigned int *, unsigned int *, unsigned int);
+void DemoSpwmGenHalf(saw_spwm*, const int *, unsigned int *, unsigned int);
 
