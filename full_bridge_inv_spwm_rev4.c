@@ -35,7 +35,7 @@ _FGS(CODE_PROT_OFF);										// Code Protect OFF
 #define ADC2_PIN			_LATB2
 #define ADC3_PIN			_LATB3
 #define BT_START			!PORTDbits.RD0
-#define EXT_TRIGGER			_LATD1
+#define EXT_TRIGGER			PORTDbits.RD1
 #define MOVEING_SIZE		10
 
 /* Global Variable *******************************************************************************/
@@ -53,14 +53,16 @@ unsigned char initial_flag;
 unsigned char first_spwm_sin_amp;
 char serial_buffer[50]="";
 unsigned int mcnt, mcnt2;
+unsigned char ext_hold = 0;
+unsigned char halt = 0;
 
 /*ADC Value*/
-unsigned int adc_value[2] = {0,0};
-
+unsigned int adc_value[3] = {0,0,0};
+unsigned int adc_mavg[3] = {0,0,0};
 // Moving Average
 unsigned int q0data[MOVEING_SIZE];
 unsigned int q1data[MOVEING_SIZE];
-unsigned int adc_mavg[2] = {0,0};
+unsigned int q2data[MOVEING_SIZE];
 
 /* Function Prototypes here!! ********************************************************************/
 void delay_ms(unsigned int);												/*For Main Software*/
@@ -87,7 +89,7 @@ void GetAdc(unsigned int * pt_adc){
 	unsigned char i=0;
 	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
 	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
-	for(i=0;i<=1;i++){
+	for(i=0;i<=2;i++){
 		*(pt_adc+i) = ReadADC10(i);
 	}	
 	//*(pt_adc) = 500;//930; // amp
@@ -114,7 +116,7 @@ int main(void){
 	LATD = 0x0000;
 	TRISE = 0x0000;
 	LATE = 0x0000;
-	TRISB = 0x000E;									/*Reserving RB1 for LED Output*/
+	TRISB = 0x001E;									/*Reserving RB1 for LED Output*/
 	LATB = 0x0000;	
 
 	/*
@@ -137,6 +139,7 @@ int main(void){
 	for(mcnt=0;mcnt<=(MOVEING_SIZE-1);mcnt++){
 		q0data[mcnt] = 0;
 		q1data[mcnt] = 0;
+		q2data[mcnt] = 0;
 	}
 	while (1) 
 	{
@@ -149,12 +152,14 @@ int main(void){
 		for(mcnt=0;mcnt<=(MOVEING_SIZE*2);mcnt++){			/*Adding AdcValue for initial queue.*/
 			GetAdc(adc_value);
 			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
-			adc_mavg[1] = MovingAverage(q0data,adc_value[1]);
+			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+			adc_mavg[2] = MovingAverage(q2data,adc_value[2]);
 		}
 
 		/*Waiting for BT_START*/
 		mcnt = 0;
-		while(!BT_START){									/*If BT_START is True, Exiting the while loop*/
+		//while(!BT_START){									/*If BT_START is True, Exiting the while loop*/
+		while( !(BT_START || EXT_TRIGGER) ) {					/*If BT_START is True, Exiting the while loop*/
 			if(mcnt++ <= 5){
 				LED = 1;
 			}else if((mcnt >5)&&(mcnt<=50)){
@@ -164,8 +169,11 @@ int main(void){
 			}
 			GetAdc(adc_value);
 			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
-			adc_mavg[1] = MovingAverage(q0data,adc_value[1]);
-			sprintf(serial_buffer,"%d,%d,%d,%d\n\r", adc_value[0], adc_value[1], adc_mavg[0], adc_mavg[1]);
+			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+			adc_mavg[2] = MovingAverage(q2data,adc_value[2]);
+			serial_buffer[0]='\0';
+			sprintf(serial_buffer,"%d,%d,%d,%d,%d,%d\n\r", adc_value[0], adc_value[1], adc_value[2], adc_mavg[0], adc_mavg[1], adc_mavg[2]);
+			UART1SendText(serial_buffer);
 			// for(mcnt2=0;mcnt2<=1;mcnt2++){
 			// 	sprintf(serial_buffer,"%d,", adc_value[mcnt2]);
 			// 	UART1SendText(serial_buffer);
@@ -174,6 +182,11 @@ int main(void){
 			// UART1SendText("\n\r");
 			delay_int_ms(10);
 		}
+
+		if(EXT_TRIGGER){
+			ext_hold = 1;
+		}
+
 		/*
 		*	Start SPWM Softly....
 		*/	
@@ -197,6 +210,7 @@ int main(void){
 			GetAdc(adc_value);
 			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
 			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+			adc_mavg[2] = MovingAverage(q2data,adc_value[2]);
 			spwm_sin_amp = 20;							/*First Assign SPWM Amplitude*/
 			PR1 = ADC2SpwmPeriod(adc_mavg[1]);	
 		}
@@ -208,7 +222,11 @@ int main(void){
 		UART1SendText("RELAY ON;\n\r");
 
 		/*6. Soft-start*/
-		first_spwm_sin_amp = adc_mavg[0]/11;			/*The target value of soft-start*/
+		if(EXT_TRIGGER){									/*Selector*/
+			first_spwm_sin_amp = adc_mavg[2]/11;			/*The target value of soft-start*/
+		}else{
+			first_spwm_sin_amp = adc_mavg[0]/11;
+		}
 		for(mcnt = spwm_sin_amp;mcnt <= first_spwm_sin_amp;mcnt+=3){
 			spwm_sin_amp = mcnt;
 			PR1 = ADC2SpwmPeriod(adc_mavg[1]);
@@ -229,33 +247,29 @@ int main(void){
 
 			/*Get Adc Value*/
 			GetAdc(adc_value);
-			for(mcnt=1;mcnt<=2;mcnt++){
-				//adc_value[mcnt-1] = ReadADC10(mcnt);
-				sprintf(serial_buffer,"%d,", adc_value[mcnt-1]);
-				UART1SendText(serial_buffer);
-			}
+			// for(mcnt=1;mcnt<=3;mcnt++){
+			// 	//adc_value[mcnt-1] = ReadADC10(mcnt);
+			// 	//sprintf(serial_buffer,"%d,", adc_value[mcnt-1]);
+			// 	//UART1SendText(serial_buffer);
+			// }
 			
-			/*Demo Adjusting Sin Wave Amplitude*/
-			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);
 			
-			/*Demo Adjusting Frequency*/
-			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);
+			adc_mavg[0] = MovingAverage(q0data,adc_value[0]);/*Demo Adjusting Sin Wave Amplitude*/
+			adc_mavg[1] = MovingAverage(q1data,adc_value[1]);/*Demo Adjusting Frequency*/
+			adc_mavg[2] = MovingAverage(q2data,adc_value[2]);
 
 			/*Updating period*/
-			spwm_sin_amp = adc_mavg[0]/11;
-			PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/* I don't know why I can't put var to PR1 directly*/
+			if(EXT_TRIGGER){							/*Selector*/
+				spwm_sin_amp = adc_mavg[2]/11;			/*Amplitude*/
+			}else{
+				spwm_sin_amp = adc_mavg[0]/11;
+			}		
+			PR1 = ADC2SpwmPeriod(adc_mavg[1]);			/*I don't know why I can't put var to PR1 directly*/
 
 			/*Debugging : Send adc_mavg*/
 			serial_buffer[0]='\0';
-			sprintf(serial_buffer,"%d,", adc_mavg[0]);
+			sprintf(serial_buffer,"%d,%d,%d,%d,%d,%d\n\r", adc_value[0], adc_value[1], adc_value[2], adc_mavg[0], adc_mavg[1], adc_mavg[2]);
 			UART1SendText(serial_buffer);
-
-			serial_buffer[0]='\0';
-			sprintf(serial_buffer,"%d,", adc_mavg[1]);
-			UART1SendText(serial_buffer);
-
-			/*Debugging : End*/
-			UART1SendText("\n\r");
 
 			/*Sampling Times (Soft)*/
 			delay_ms(10);
@@ -263,7 +277,13 @@ int main(void){
 			/*
 			*	Check stop button to stop engine.
 			*/
-			if(!BT_START){								/*If BT_START is False, Breaking the while loop*/
+			if(ext_hold){
+				halt = EXT_TRIGGER;
+			}else{
+				halt = BT_START;
+			}
+			//if(!BT_START){										/*If BT_START is False, Breaking the while loop*/
+			if(!halt){
 				initial_flag = 1;								/*Set Initial Flag*/
 				LED = 1;
 				RELAY_PIN = 0;									/*2. Clear Relay*/
@@ -278,6 +298,7 @@ int main(void){
 				SPWM_TRIOUT = 0;
 				SPWM_OUT = 0;
 				initial_flag = 0;								/*Set Initial Flag*/
+				ext_hold = 0;
 				break;
 			}
 		}
@@ -325,7 +346,7 @@ void AdcInitV2(void){
 	            	ENABLE_AN1_ANA &
 	            	ENABLE_AN2_ANA &
 	            	ENABLE_AN3_ANA ;                                          
-	Scanselect= 	SKIP_SCAN_AN0 &				// Scan for AN0-AN3
+	Scanselect= 	SKIP_SCAN_AN0 &				// Scan for AN1-AN3
 					SKIP_SCAN_AN4 &             
 	            	SKIP_SCAN_AN5 &
 	            	SKIP_SCAN_AN6 &
