@@ -20,6 +20,7 @@
 #include <adc10.h>
 #include "spwm.h"
 #include <stdio.h>
+#include "jslcd.h"
 
 /* Setup Configuration For ET-BASE dsPIC30F4011 */
 _FOSC(CSW_FSCM_OFF & XT_PLL16);								// Disable Clock Switching,Enable Fail-Salf Clock // Clock Source = Primary XT + (PLL x 8)
