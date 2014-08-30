@@ -9,10 +9,10 @@
 #include <p30F4011.h>
 
 /* Definition ************************************************************************************/
-#define SPWM_GATE1 			_LATE1		/*Output Define*/
-#define SPWM_GATE2 			_LATE0		/*Output Define*/
-#define SPWM_TRIOUT			_LATE2
-#define SPWM_OUT 			_LATE3
+#define SPWM_GATE1 			_LATE0		/*Output Define*/
+//#define SPWM_GATE2 			_LATE0		/*Output Define*/
+//#define SPWM_TRIOUT			_LATE2
+#define SPWM_OUT 			_LATE1
 #define SPWM_TRIMAX		640			/*Triangle Max Value*/
 #define SPWM_TRIINC 	32			/*Triangle Increasing step*/
 #define SPWM_SINMAXPTR	1999		/*Max data of sine wave in lookup table [0-3999]*/

@@ -30,13 +30,32 @@ _FGS(CODE_PROT_OFF);										// Code Protect OFF
 /* End Configuration For ET-BASE dsPIC30F4011 */
 
 /* Global Define *********************************************************************************/
-#define RELAY_PIN			_LATE4 /*E0-E3 For SPWM*/
-#define LED 				_LATB0
-#define ADC1_PIN			_LATB1
-#define ADC2_PIN			_LATB2
-#define ADC3_PIN			_LATB3
-#define BT_START			!PORTDbits.RD0
-#define EXT_TRIGGER			PORTDbits.RD1
+/*Pre Processor Directive*/
+// #define __TEST_POWER
+#define __TEST_LCD
+
+#define SPWM_ST 			Timer1Interrupt(1)
+#define SPWM_SP 			Timer1Interrupt(0)
+
+/*Drive Signal Pin are defined in spwm.h #### E0-E1 */
+#define BT_START			!PORTDbits.RD0 		// INPUT
+#define BT_STOP				!PORTDbits.RD1 		// INPUT
+#define BT_MENU				!PORTDbits.RD2 		// INPUT
+#define BT_ENT				!PORTDbits.RD3 		// INPUT
+
+#define RELAY_PIN			_LATB0 				// OUTPUT
+#define ADC_EXT				_LATB1 				// AN1
+#define ADC_TEMP			_LATB2 				// AN2
+#define EXT_TRIGGER			PORTBbits.RB3 		// INPUT
+#define BT_ENC				PORTBbits.RB6		// INPUT
+#define ENC_A				TRISBbits.TRISB4 	// INPUT
+#define ENC_B				TRISBbits.TRISB5 	// INPUT
+
+#define UART_TX				TRISCbits.TRISC13
+#define UART_RX				TRISCbits.TRISC14
+
+#define LED 				_LATF4
+
 #define MOVEING_SIZE		10
 
 /* Global Variable *******************************************************************************/
@@ -56,6 +75,8 @@ char serial_buffer[50]="";
 unsigned int mcnt, mcnt2;
 unsigned char ext_hold = 0;
 unsigned char halt = 0;
+unsigned char menu_id = 0;					//BT_MENU
+unsigned char lock_flag = 0;				//Lock Screen Flag
 
 /*ADC Value*/
 unsigned int adc_value[3] = {0,0,0};
@@ -74,6 +95,8 @@ void UART1Send(unsigned char);
 void UART1SendText(char[]);
 void UART1SendStrNumLine(char[], unsigned int);
 
+void EncoderInit(void);														/*Encoder*/
+
 void AdcInitV2(void);														/*Adc Module*/
 unsigned int ADC2SpwmPeriod(unsigned int);
 unsigned int AdcLimit(int);
@@ -86,6 +109,7 @@ void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void);		/*ISR*/
 void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);		/*ISR*/
 /*void __attribute__((__interrupt__, __auto_psv__)) _U1RXInterrupt(void);*/
 
+/* Function here!! (Small function only) *********************************************************/
 void GetAdc(unsigned int * pt_adc){
 	unsigned char i=0;
 	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
@@ -100,6 +124,12 @@ void delay_int_ms(unsigned int inp){
 	intp_delay_cnt = inp;
 	while(intp_delay_cnt>0);
 }
+void update_freq(unsigned int inp){
+	PR1 = ADC2SpwmPeriod(inp);
+}
+void update_amp(unsigned int inp){
+	spwm_sin_amp = inp/11;
+}
 /**************************************************************************************************
 * Function Name: Main
 * Output Variable:
@@ -113,20 +143,175 @@ int main(void){
 	*	Initial I/O
 	*  	TRISX: Output is 0b0, Input is 0b1 for earch bit.
 	*/
-	TRISD = 0x0003;
-	LATD = 0x0000;
-	TRISE = 0x0000;
-	LATE = 0x0000;
-	TRISB = 0x001E;									/*Reserving RB1 for LED Output*/
-	LATB = 0x0000;	
+	TRISD = 0x000F;			/*IN: D0-D3*/
+	//TRISB = 0x007E;			/*OUT: B0, IN: B1-B6*/
+	// TRISE = 0x0000;			/*OUTPUT: E0-E1*/
+	// TRISF = 0x0000;			/*OUTPUT: F4*/
 
 	/*
-	*	Initial Module
+	*	Initial Fundamental Module
 	*/
-	UART1Init();
 	Timer2Interrupt();
 	AdcInitV2();
+	EncoderInit();
+	UART1Init();
 	UART1SendStrNumLine("START",1234);
+
+	/*
+	 *  Testing Module
+	 */
+	#ifdef __TEST_POWER
+	 	SPWM_ST;
+		while(1){
+			update_freq(1000);
+			update_amp(1000);
+		}	
+	#endif
+	#ifdef __TEST_LCD
+		TRISF = 0x0000;
+		TRISE = 0x0000;
+		Initial_4bitLCD();
+		clear_lcd();
+		while(1){
+			if(BT_MENU && (!lock_flag)){			// BT Check  & Lock Alg
+				while(BT_MENU);						// BT Release
+				menu_id++;
+			}
+			if(menu_id > 2){
+				menu_id = 0;
+			}
+
+			if(BT_START){
+				LCD_LINE2;
+				LcdPrint("BT_START");	
+			}
+			else if(BT_STOP){
+				LCD_LINE2;
+				LcdPrint("BT_STOP");	
+			}else{
+				LCD_LINE2;
+				LcdPrint("");
+			}
+
+			/*Lock Algorithm: Lock Warning Display*/
+			if(lock_flag){							// Locked
+				if(BT_MENU||BT_START||BT_STOP){		// Prevent to push BT
+					for(mcnt=0;mcnt<=200;mcnt++){
+						LCD_LINE2;
+						LcdPrint("Locked");	
+					}
+					LCD_LINE2;
+					LcdPrint("");
+				}
+			}
+
+			/*Launch Menu*/
+			switch(menu_id){
+				case 0:
+					LCD_LINE1;
+					LcdPrint("HOME");
+
+					/*Lock Algorithm*/
+					if(BT_ENT){
+						for(mcnt=0;mcnt<=200;mcnt++){
+							LCD_LINE2;
+							LcdPrint("P-Lock");
+							if(BT_ENC){
+								lock_flag = !lock_flag;
+								if(lock_flag){
+									LCD_LINE2;
+									LcdPrint("Locked");	
+								}else{
+									LCD_LINE2;
+									LcdPrint("Unlock");
+								}
+								while(BT_ENC);		//Exit when Release
+								delay_ms(1000);
+								menu_id = 0;		// Return Home
+								break;
+							}
+						}
+						LCD_LINE2;
+						LcdPrint("");
+					}
+					// if(BT_ENC){
+					// 	LCD_LINE2;
+					// 	LcdPrint("BT_ENC");
+					// }else{
+					// 	LCD_LINE2;
+					// 	LcdPrint("");
+					// }
+				break;
+
+				case 1:
+					LCD_LINE1;
+					LcdPrint("FREQ");
+					if(BT_ENT && (!lock_flag)){						// BT Check
+						while(BT_ENT);				// BT Release
+						/*Pre-process action*/
+						POSCNT = 0;
+						/*End:Pre-process action*/
+						while(!BT_MENU){			// Push to exit
+							LCD_LINE2;
+							LcdPrintNum("ENT  %3d",POSCNT);
+						}
+						while(BT_MENU);				// Release
+						/*Exit action*/
+						menu_id++;					// Increase menu_id when exit.
+						LCD_LINE2;
+						LcdPrint("");
+						/*End:Exit action*/
+					}
+				break;
+
+				case 2:
+					LCD_LINE1;
+					LcdPrint("AMP");
+					if(BT_ENT && (!lock_flag)){						// BT Check
+						while(BT_ENT);				// BT Release
+						/*Pre-process action*/
+						POSCNT = 0;
+						/*End:Pre-process action*/
+						while(!BT_MENU){			// Push to exit
+							LCD_LINE2;
+							LcdPrintNum("ENT  %3d",POSCNT);
+						}
+						while(BT_MENU);				// Release
+						/*Exit action*/
+						menu_id++;					// Increase menu_id when exit.
+						LCD_LINE2;
+						LcdPrint("");
+						/*End:Exit action*/
+					}
+				break;
+			}
+			// LCD_LINE1;							// Start Cursor Line-1   
+			// PutsLCD((unsigned char *)"RESULT= ");
+			// LCD_LINE2;							// Start Cursor Line-1   
+			// //PutsLCD((unsigned char *)"RE 511= ");
+			// LcdPrintNum("JAMES%3d",menu_id);
+			LED = !LED;
+			delay_int_ms(50);
+		}
+	#endif
+	// TRISFbits.TRISF4 = 0;
+	// Initial_4bitLCD();							// Set initial LCD
+	// clear_lcd();
+	
+	// SetDDRamAddr(0x00);							// Start Cursor Line-1   
+	// PutsLCD((unsigned char *)"RESULT= ");
+	// SetDDRamAddr(0x40);							// Start Cursor Line-1   
+	// PutsLCD((unsigned char *)"RE 511= ");
+	// LATFbits.LATF4 = !LATFbits.LATF4;		
+	// delay_int_ms(100);
+	//clear_lcd();
+	// TRISE = 0x00;
+	// TRISF = 0x00;
+ //  Lcd4_Init();
+ //      Lcd4_Set_Cursor(1,1);
+ //    Lcd4_Write_String("electroSome LCD Hello World");
+	
+	 
 	// while(1){
 	// 	LED =1;
 	// 	delay_int_ms(1000);
@@ -295,8 +480,6 @@ int main(void){
 				}
 				Timer1Interrupt(0);								/*3. Stop Timer*/
 				SPWM_GATE1 = 0;									/*4. Clear all drive signal*/
-				SPWM_GATE2 = 0;
-				SPWM_TRIOUT = 0;
 				SPWM_OUT = 0;
 				initial_flag = 0;								/*Set Initial Flag*/
 				ext_hold = 0;
@@ -326,28 +509,39 @@ void delay_ms(unsigned int ms)
 	}
 }
 /**************************************************************************************************
+* Function Name: 
+* Propose: 
+* Output Variable:
+* Input Variable: 
+* Reference:
+* Note: 
+* First written : Sarucha Yanyong
+**************************************************************************************************/
+void EncoderInit(void){
+	QEICONbits.QEIM = 0b101;
+	POSCNT = 0x0000;
+	MAXCNT = 0xFFFF;
+}
+/**************************************************************************************************
 * Function Name: AdcInitV2
 * Output Variable:
 * Input Variable:
-* Note:
+* Note: QEA is RB4, QEB is RB5
 * Version:
 * First written : Sarucha Yanyong
 **************************************************************************************************/
 void AdcInitV2(void){
 	unsigned int Channel, PinConfig, Scanselect, Adcon3_reg, Adcon2_reg,Adcon1_reg;
 	ADCON1bits.ADON = 0;                    	// Turn off ADC     
-	Channel =   	ADC_CH0_POS_SAMPLEA_AN0 &	// Channel 0 positive input select AN0
-                	ADC_CH0_POS_SAMPLEA_AN1 & 	// Channel 0 positive input select AN1
-                	ADC_CH0_POS_SAMPLEA_AN2 & 	// Channel 0 positive input select AN2
-                	ADC_CH0_POS_SAMPLEA_AN3 & 	// Channel 0 positive input select AN3           
+	Channel =   	ADC_CH0_POS_SAMPLEA_AN1 & 	// Channel 0 positive input select AN1
+                	ADC_CH0_POS_SAMPLEA_AN2 & 	// Channel 0 positive input select AN2          
                 	ADC_CH0_NEG_SAMPLEA_NVREF ; // Channel 0 negative VREF
 	SetChanADC10(Channel);                  	// Set channel configuration             
 	ConfigIntADC10(ADC_INT_DISABLE);            // Disable interrupt for ADC
-	PinConfig =		ENABLE_AN0_ANA &            // Enable AN0-AN3 analog port
-	            	ENABLE_AN1_ANA &
-	            	ENABLE_AN2_ANA &
-	            	ENABLE_AN3_ANA ;                                          
-	Scanselect= 	SKIP_SCAN_AN0 &				// Scan for AN1-AN3
+	PinConfig =		ENABLE_AN1_ANA &            // Enable AN0-AN3 analog port
+	            	ENABLE_AN2_ANA ;                                          
+	Scanselect= 	SKIP_SCAN_AN0 &				// Scan for AN1-AN2
+					SKIP_SCAN_AN3 &  
 					SKIP_SCAN_AN4 &             
 	            	SKIP_SCAN_AN5 &
 	            	SKIP_SCAN_AN6 &
