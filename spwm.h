@@ -9,10 +9,10 @@
 #include <p30F4011.h>
 
 /* Definition ************************************************************************************/
-#define SPWM_GATE1 			_LATE0		/*Output Define*/
+#define SPWM_GATE1 			_LATE1		/*Output Define*/
 //#define SPWM_GATE2 			_LATE0		/*Output Define*/
 //#define SPWM_TRIOUT			_LATE2
-#define SPWM_OUT 			_LATE1
+#define SPWM_OUT 			_LATE0
 #define SPWM_TRIMAX		640			/*Triangle Max Value*/
 #define SPWM_TRIINC 	32			/*Triangle Increasing step*/
 #define SPWM_SINMAXPTR	1999		/*Max data of sine wave in lookup table [0-3999]*/
@@ -44,9 +44,9 @@ typedef struct{
 }saw_spwm;							/*Opterating structure for DemoSpwmGenHalf Function*/
 
 /* Function Prototypes ***************************************************************************/
-void DemoTriGen(unsigned int*);
+// void DemoTriGen(unsigned int*);
 void SawToothGen(unsigned int*, const unsigned int, const unsigned char);
-void DemoSpwmGen(stspwm*, const unsigned int *);
-void DemoSpwmGen2(stspwm*, const unsigned int *, unsigned int *);
+// void DemoSpwmGen(stspwm*, const unsigned int *);
+// void DemoSpwmGen2(stspwm*, const unsigned int *, unsigned int *);
 void DemoSpwmGenHalf(saw_spwm*, const int *, unsigned int *, unsigned int);
 

@@ -201,8 +201,8 @@ void SawToothGen(unsigned int*pt, const unsigned int max, const unsigned char st
 * Version: 2014-07-17 22-23
 * First written : Sarucha Yanyong
 **************************************************************************************************/
-unsigned int tm1;
-unsigned int tm2;
+// unsigned int tm1;
+// unsigned int tm2;
 void DemoSpwmGenHalf(saw_spwm * sp, const int * sin_lookup, unsigned int * tri_lookup, unsigned int s_amp){
     /*Generating Triangle*/
     /*Triangle is Ok! Checking on 2014-07-16 21-25*/
@@ -236,5 +236,6 @@ void DemoSpwmGenHalf(saw_spwm * sp, const int * sin_lookup, unsigned int * tri_l
     /*Period Pointer*/          
     if(++sp->period > 1999){   /*COUNTER*/
         sp->period = 0;             /*Reset period pointer*/
+        SPWM_OUT = !SPWM_OUT;
    }
 }

@@ -39,6 +39,7 @@
 #define SHIFT_DISP_RIGHT    0x1F  						// Display shifts to the right  	
 
 #define LCD_LINE1           SetDDRamAddr(0x00)  
+#define LCD_LINE1_2         SetDDRamAddr(0x04)  
 #define LCD_LINE2           SetDDRamAddr(0x40)		
 
 void lcd_delay(unsigned int ms)
@@ -206,9 +207,14 @@ void PutsLCD(unsigned char* buffer)
     buffer++;
   } 
 }
-void LcdPrint(char* inp_str){
+void LcdPrintLine(char* inp_str){
   char str[8];
   sprintf(str,"%8s",inp_str);
+  PutsLCD((unsigned char *)str);
+}
+void LcdPrint(char* inp_str){
+  char str[4];
+  sprintf(str,"%s",inp_str);
   PutsLCD((unsigned char *)str);
 }
 void LcdPrintNum(char* inp_str, unsigned int inp_num){
