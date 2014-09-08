@@ -215,9 +215,10 @@ void DemoSpwmGenHalf(saw_spwm * sp, const int * sin_lookup, unsigned int * tri_l
     */
     //sp->sinsig = (*(sin_lookup + sp->sinptr)*s_amp)/100;       /*Adjusting Sine Amplitude*/    
     // sp->sinsig = ((*(sin_lookup + sp->sinptr))*s_amp)/100+ 320;            /*Adjusting Sine Amplitude*/     
-    sp->sinsig = (( *(sin_lookup + sp->sinptr) )*((int)s_amp))/100 + 320;              
+    sp->sinsig = (( *(sin_lookup + sp->sinptr) )*((int)sp->sin_sig_temp))/100 + 320;              /*New*/
     if(++sp->sinptr > SPWM_SINMAXPTR){                          /*SIN WAVE COUNTER*/
         sp->sinptr = 0;                                         /*Reset pointer for create Infinity Sine Wave*/
+        sp->sin_sig_temp = s_amp;
         //SPWM_TRIOUT =!SPWM_TRIOUT;  
     }
 
@@ -236,6 +237,6 @@ void DemoSpwmGenHalf(saw_spwm * sp, const int * sin_lookup, unsigned int * tri_l
     /*Period Pointer*/          
     if(++sp->period > 1999){   /*COUNTER*/
         sp->period = 0;             /*Reset period pointer*/
-        SPWM_OUT = !SPWM_OUT;
+        //SPWM_OUT = !SPWM_OUT;
    }
 }

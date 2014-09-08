@@ -1,6 +1,6 @@
 # MPLAB IDE generated this makefile for use with Microsoft `nmake'.
 # Project: 30F4011_EMAG_rev4.mcp
-# Date: Thu Sep 04 01:11:31 2014
+# Date: Mon Sep 08 21:27:33 2014
 
 AS = pic30-as.exe
 CC = pic30-gcc.exe
