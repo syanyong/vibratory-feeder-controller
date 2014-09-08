@@ -235,7 +235,7 @@ int main(void){
 	*  	TRISX: Output is 0b0, Input is 0b1 for earch bit.
 	*/
 	TRISD = 0x000F;			/*IN: D0-D3*/
-	//TRISB = 0x007E;			/*OUT: B0, IN: B1-B6*/
+	TRISB = 0x007E;			/*OUT: B0, IN: B1-B6*/
 	TRISE = 0x0000;			/*OUTPUT: E0-E1*/
 	TRISF = 0x0000;			/*OUTPUT: F4*/
 
