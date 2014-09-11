@@ -93,13 +93,16 @@ unsigned int handle_freq = 0;
 unsigned int handle_amp = 0;
 unsigned char handle_prev_chg = 0;
 
+/*FLAG*/
 unsigned char handle_isr_flag=0;
+unsigned char handle_ext_flag=0;
+unsigned char hold_ext_status=0;
 
 /*EXTI Module*/
 unsigned char int_run_flag = 0;
 
 /*ADC Value*/
-unsigned int adc_value[3] = {0,0,0};
+unsigned int adc_value[2] = {0,0};			// 2014-09-11
 unsigned int adc_mavg[3] = {0,0,0};
 
 /*Moving Average*/
@@ -138,6 +141,8 @@ void Timer2Interrupt(void);
 void EXTIModuleInit(void);													/*EXTI Module*/
 
 void SPWMModuleAutoInit(void);
+void SPWMModuleSoftStart(void);
+void SPWMModuleSoftStop(void);
 
 void __attribute__((__interrupt__, __auto_psv__)) _T1Interrupt(void);		/*ISR*/
 void __attribute__((__interrupt__, __auto_psv__)) _T2Interrupt(void);		/*ISR*/
@@ -150,7 +155,7 @@ void GetAdc(unsigned int * pt_adc){
 	unsigned char i=0;
 	ADCON1bits.SAMP = 1;                    		/*Start Sampling*/
 	ConvertADC10();                 				/*Convert to Digital 10 bits*/     
-	for(i=0;i<=2;i++){
+	for(i=0;i<=1;i++){
 		*(pt_adc+i) = ReadADC10(i);
 	}	
 	//*(pt_adc) = 500;//930; // amp
@@ -332,7 +337,7 @@ int main(void){
 	handle_freq = EEData_read[0];
 	handle_amp = EEData_read[1];
 	lock_flag = EEData_read[2];
-
+	handle_ext_flag = EEData_read[3];
 	
 	
 	/* START SPWM*/
@@ -344,6 +349,8 @@ int main(void){
 	PR1 = 380-((handle_freq-40)*4.8);			// FREQ{40->80}-->PR{300->184}
 	spwm_sin_amp = handle_amp;
 	
+	EXT_TRIGGER=0;
+	hold_ext_status = 0;
 
 	/*
 	*	LOOOOOOOOOP
@@ -354,7 +361,7 @@ int main(void){
 			while(BT_MENU);						// BT Release
 			menu_id++;
 		}
-		if(menu_id > 2){
+		if(menu_id > 4){
 			menu_id = 0;
 		}
 
@@ -373,7 +380,55 @@ int main(void){
 			}
 		}
 
-		/*Launch Menu*/
+		/*	
+		*
+		*	PLC CONTROL!!!
+		*
+		*/
+		if(handle_ext_flag){
+			GetAdc(adc_value);
+
+			/*For Soft-Start && Soft-Stop*/
+			if(hold_ext_status != EXT_TRIGGER){		//Detect Changing
+				LCD_LINE2;
+				LcdPrintLine("EXS");
+				delay_ms(500);
+				if(EXT_TRIGGER){					//Rising (0->1)
+					LCD_LINE2;
+					LcdPrintLine("EX RISE");
+					handle_amp = adc_value[0]/11;
+					spwm_sin_amp = handle_amp;
+					SPWMModuleSoftStart();
+					LCD_LINE2;
+					LcdPrintLine("STARTED");
+				}
+				if(EXT_TRIGGER==0){					//Falling (1->0)
+					LCD_LINE2;
+					LcdPrintLine("EX FALL");
+					SPWMModuleSoftStop();
+					LCD_LINE2;
+					LcdPrintLine("STOPPED");
+				}
+				delay_ms(1000);
+				LCD_LINE2;
+				LcdPrintLine("");
+			}
+			/*For running*/
+			if(EXT_TRIGGER){
+				int_run_flag=1;
+				handle_amp = adc_value[0]/11;
+				spwm_sin_amp = handle_amp;
+			}else{
+				int_run_flag=0;
+			}
+		}
+		hold_ext_status = EXT_TRIGGER;
+
+		/*	
+		*
+		*	LAUNCH MENU!!!
+		*
+		*/
 		switch(menu_id){
 			case 0:
 				LCD_LINE1_2;
@@ -404,13 +459,6 @@ int main(void){
 					LCD_LINE2;
 					LcdPrintLine("");
 				}
-				// if(BT_ENC){
-				// 	LCD_LINE2;
-				// 	LcdPrintLine("BT_ENC");
-				// }else{
-				// 	LCD_LINE2;
-				// 	LcdPrintLine("");
-				// }
 			break;
 
 			case 1:
@@ -464,7 +512,7 @@ int main(void){
 				LcdPrint(" AMP");
 				if(BT_ENT && (!lock_flag)) {		// BT Check  & Block when Locked
 					NOPP;
-					while(BT_ENT);				// BT Release
+					while(BT_ENT);					// BT Release
 					/*Pre-process action*/
 					POSCNT = 0;
 					POSCNT = handle_amp;
@@ -473,14 +521,14 @@ int main(void){
 					LcdPrintLine("ACCESS");
 
 					/*End:Pre-process action*/
-					while(!BT_MENU){				// Push BT_MENU to exit
-						POSCNT = SatRate(1,100,POSCNT);	// Prevent Negative
+					while(!BT_MENU){							// Push BT_MENU to exit
+						POSCNT = SatRate(1,100,POSCNT);			// Prevent Negative
 						handle_amp = POSCNT;
 						
 						/*Assign*/
 						//spwm_sin_amp = handle_amp;
 
-						/*Keep*/
+						/*Detect Changing & Keep*/
 						if(handle_amp != handle_prev_chg) {		// Detect freq change
 							while(handle_isr_flag) { NOPP; }
 							spwm_sin_amp = handle_amp;
@@ -507,6 +555,107 @@ int main(void){
 					/*End:Exit action*/
 				}
 			break;
+
+			/*
+			*
+			*	CASE 3: Enable Trigger
+			*
+			*/
+			case 3:
+				LCD_LINE1_2;
+				LcdPrint("EXTN");
+				if(BT_ENT && (!lock_flag)) {		// BT Check  & Block when Locked	
+					NOPP;
+					while(BT_ENT);					// BT Release
+					/*Pre-process action*/
+					POSCNT = 0;
+					POSCNT = handle_ext_flag;
+					handle_prev_chg = 0;						// prev_chg is used in this loop only.
+					LCD_LINE2;
+					LcdPrintLine("ACCESS");
+						/*End:Pre-process action*/
+					while(!BT_MENU){							// Push BT_MENU to exit
+						POSCNT = SatRate(0,1,POSCNT);			// Prevent Negative
+						handle_ext_flag = POSCNT;
+
+						char str__cs3[8];
+						switch(handle_ext_flag){
+							case 1: 
+								sprintf(str__cs3,"%8s","ENABLE");
+							break;
+
+							case 0:
+								sprintf(str__cs3,"%8s","DISABLE");
+							break;
+						}
+						/*Put str to LCD*/
+						LCD_LINE2;
+						PutsLCD((unsigned char *)str__cs3);
+
+						/*Detect Changing & Keep*/
+						if(handle_ext_flag != handle_prev_chg) {	// Detect freq change
+							EEData_write[3] = handle_ext_flag;		// Change only [x] Address.
+							EEPROM_Write(EEData_write);				// Write it
+						}
+						/*Hold Previous*/
+						handle_prev_chg = handle_ext_flag;
+
+					}
+					while(BT_MENU);				// Release
+					/*Exit action*/
+					menu_id++;					// Increase menu_id when exit.
+					LCD_LINE2;
+					LcdPrintLine("");
+					/*End:Exit action*/
+				}
+			break;
+
+			case 4:
+				LCD_LINE1_2;
+				LcdPrint("DIAG");
+				if(BT_ENT && (!lock_flag)) {		// BT Check  & Block when Locked
+					NOPP;
+					while(BT_ENT);					// BT Release
+					
+					/*Pre-process action*/
+					POSCNT = 0;
+					LCD_LINE2;
+					LcdPrintLine("ACCESS");
+
+					/*End:Pre-process action*/
+					while(!BT_MENU){							// Push BT_MENU to exit
+						POSCNT = SatRate(0,2,POSCNT);			// Prevent Negative
+
+						/*Update ADC Value*/
+						GetAdc(adc_value);
+
+						char str__cs3[8];
+						switch(POSCNT){
+							case 0: 
+								sprintf(str__cs3," AN=%4d",adc_value[0]);
+							break;
+
+							case 1:
+								sprintf(str__cs3,"TEM=%4d",adc_value[1]);
+							break;
+
+							case 2:
+								sprintf(str__cs3,"EXT=%4d",EXT_TRIGGER);
+							break;
+						}
+						/*Put str to LCD*/
+						LCD_LINE2;
+						PutsLCD((unsigned char *)str__cs3);
+					}
+					while(BT_MENU);				// Release
+					/*Exit action*/
+					menu_id++;					// Increase menu_id when exit.
+					LCD_LINE2;
+					LcdPrintLine("");
+					/*End:Exit action*/
+				}
+			break;
+
 		}
 		delay_ms(50);
 	}
